@@ -73,8 +73,40 @@ def format_phone(num):
 
 
 def do_zip_update():
-    print("Atualização via ZIP está desativada nesta versão.")
-    print("Por favor, atualize manualmente se necessário.")
+    success = False
+    if DEBUG_MODE:
+        zip_url = "https://github.com/TheSpeedX/TBomb/archive/dev.zip"
+        dir_name = "TBomb-dev"
+    else:
+        zip_url = "https://github.com/TheSpeedX/TBomb/archive/master.zip"
+        dir_name = "TBomb-master"
+    print(ALL_COLORS[0]+"Baixando ZIP ... "+RESET_ALL)
+    response = requests.get(zip_url)
+    if response.status_code == 200:
+        zip_content = response.content
+        try:
+            with zipfile.ZipFile(BytesIO(zip_content)) as zip_file:
+                for member in zip_file.namelist():
+                    filename = os.path.split(member)
+                    if not filename[1]:
+                        continue
+                    new_filename = os.path.join(
+                        filename[0].replace(dir_name, "."),
+                        filename[1])
+                    source = zip_file.open(member)
+                    target = open(new_filename, "wb")
+                    with source, target:
+                        shutil.copyfileobj(source, target)
+            success = True
+        except Exception:
+            print("Erro ao extrair o arquivo!!")
+    if success:
+        print("DCL 🇱🇻 foi atualizado para a última versão")
+        print("Por favor, execute o script novamente para carregar a nova versão")
+    else:
+        print("Não foi possível atualizar o DCL 🇱🇻.")
+        print("Consiga a última versão na fonte oficial")
+
     sys.exit()
 
 
@@ -111,6 +143,7 @@ def update():
         do_git_update()
     else:
         do_zip_update()
+    # Atualiza o arquivo de versão para 4.0.0.1
     with open(".version", "w") as f:
         f.write("4.0.0.1")
     print("DCL 🇱🇻 foi atualizado para a versão 4.0.0.1")
@@ -365,4 +398,3 @@ if __name__ == "__main__":
             print("Interrupção detectada - Encerrando...")
             sys.exit()
     sys.exit()
-
